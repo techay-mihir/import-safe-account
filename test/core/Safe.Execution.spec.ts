@@ -1,6 +1,6 @@
 import { expect } from "chai";
-import hre, { deployments, ethers } from "hardhat";
-import { deployContract, getSafeWithOwners } from "../utils/setup";
+import hre, { ethers } from "hardhat";
+import { deployContract, getContractFactoryByName, getSafeWithOwners, getWallets } from "../utils/setup";
 import {
     safeApproveHash,
     buildSignatureBytes,
@@ -14,9 +14,9 @@ import {
 import { chainId } from "../utils/encoding";
 
 describe("Safe", () => {
-    const setupTests = deployments.createFixture(async ({ deployments }) => {
+    const setupTests = hre.deployments.createFixture(async ({ deployments }) => {
         await deployments.fixture();
-        const signers = await ethers.getSigners();
+        const signers = await getWallets();
         const [user1] = signers;
         const setterSource = `
             contract StorageSetter {
@@ -29,7 +29,7 @@ describe("Safe", () => {
                 }
             }`;
         const storageSetter = await deployContract(user1, setterSource);
-        const TestNativeTokenReceiver = await hre.ethers.getContractFactory("TestNativeTokenReceiver");
+        const TestNativeTokenReceiver = await getContractFactoryByName("TestNativeTokenReceiver");
         const nativeTokenReceiver = await TestNativeTokenReceiver.deploy();
 
         const reverterSource = `
@@ -55,21 +55,27 @@ describe("Safe", () => {
             const safeAddress = await safe.getAddress();
             const tx = buildSafeTransaction({ to: safeAddress, safeTxGas: 1000000, nonce: await safe.nonce() });
             const signatureBytes = buildSignatureBytes([await safeApproveHash(user1, safe, tx, true)]);
-            await expect(
-                safe.execTransaction(
-                    tx.to,
-                    tx.value,
-                    tx.data,
-                    tx.operation,
-                    tx.safeTxGas,
-                    tx.baseGas,
-                    tx.gasPrice,
-                    tx.gasToken,
-                    tx.refundReceiver,
-                    signatureBytes,
-                    { gasLimit: 1000000 },
-                ),
-            ).to.be.revertedWith("GS010");
+
+            const txPromise = safe.execTransaction(
+                tx.to,
+                tx.value,
+                tx.data,
+                tx.operation,
+                tx.safeTxGas,
+                tx.baseGas,
+                tx.gasPrice,
+                tx.gasToken,
+                tx.refundReceiver,
+                signatureBytes,
+                { gasLimit: 1000000 },
+            );
+
+            // Reverted reason seems not properly returned by zkSync local node, though it is in fact GS010 when using debug_traceTransaction
+            if (hre.network.zksync) {
+                await expect((await txPromise).wait()).to.be.reverted;
+            } else {
+                await expect(txPromise).to.be.revertedWith("GS010");
+            }
         });
 
         it("should emit event for successful call execution", async () => {
@@ -112,7 +118,7 @@ describe("Safe", () => {
             const [user1] = signers;
             const safeAddress = await safe.getAddress();
             // Fund refund
-            await user1.sendTransaction({ to: safeAddress, value: 10000000 });
+            await (await user1.sendTransaction({ to: safeAddress, value: 10000000 })).wait();
             await expect(executeContractCallWithSigners(safe, reverter, "revert", [], [user1], false, { gasPrice: 1 })).to.emit(
                 safe,
                 "ExecutionFailure",
@@ -165,7 +171,7 @@ describe("Safe", () => {
             const { safe, reverter, signers } = await setupTests();
             const [user1] = signers;
             const safeAddress = await safe.getAddress();
-            await user1.sendTransaction({ to: safeAddress, value: 10000000 });
+            await (await user1.sendTransaction({ to: safeAddress, value: 10000000 })).wait();
             await expect(executeContractCallWithSigners(safe, reverter, "revert", [], [user1], true, { gasPrice: 1 })).to.emit(
                 safe,
                 "ExecutionFailure",
@@ -199,7 +205,7 @@ describe("Safe", () => {
                 refundReceiver: user2.address,
             });
 
-            await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") });
+            await (await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") })).wait();
             const userBalance = await hre.ethers.provider.getBalance(user2.address);
             await expect(await hre.ethers.provider.getBalance(safeAddress)).to.be.eq(ethers.parseEther("1"));
 
@@ -212,7 +218,8 @@ describe("Safe", () => {
             ).to.emit(safe, "ExecutionSuccess");
             const receipt = await hre.ethers.provider.getTransactionReceipt(executedTx!.hash);
             const receiptLogs = receipt?.logs ?? [];
-            const logIndex = receiptLogs.length - 1;
+            // There are additional ETH transfer events on zkSync related to transaction fees
+            const logIndex = receiptLogs.length - (hre.network.zksync ? 2 : 1);
             const successEvent = safe.interface.decodeEventLog(
                 "ExecutionSuccess",
                 receiptLogs[logIndex].data,
@@ -240,7 +247,7 @@ describe("Safe", () => {
                 refundReceiver: user2.address,
             });
 
-            await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") });
+            await (await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") })).wait();
             const userBalance = await hre.ethers.provider.getBalance(user2.address);
             await expect(await hre.ethers.provider.getBalance(safeAddress)).to.eq(ethers.parseEther("1"));
 
@@ -253,7 +260,8 @@ describe("Safe", () => {
             ).to.emit(safe, "ExecutionFailure");
             const receipt = await hre.ethers.provider.getTransactionReceipt(executedTx!.hash);
             const receiptLogs = receipt?.logs ?? [];
-            const logIndex = receiptLogs.length - 1;
+            // There are additional ETH transfer events on zkSync related to transaction fees
+            const logIndex = receiptLogs.length - (hre.network.zksync ? 2 : 1);
             const successEvent = safe.interface.decodeEventLog(
                 "ExecutionFailure",
                 receiptLogs[logIndex].data,
@@ -330,7 +338,7 @@ describe("Safe", () => {
                 refundReceiver: nativeTokenReceiverAddress,
             });
 
-            await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") });
+            await (await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") })).wait();
             await expect(await hre.ethers.provider.getBalance(safeAddress)).to.eq(ethers.parseEther("1"));
 
             const executedTx = await executeTx(safe, tx, [await safeApproveHash(user1, safe, tx, true)], { gasLimit: 500000 });
@@ -345,7 +353,7 @@ describe("Safe", () => {
                 }
             }
 
-            expect(parsedLogs[0].forwardedGas).to.be.gte(400000n);
+            expect(parsedLogs[0].forwardedGas).to.be.gte(hre.network.zksync ? 340000n : 400000n);
         });
     });
 });

@@ -15,9 +15,11 @@
     ],
     "scripts": {
         "build": "hardhat compile",
+        "build:zk": "hardhat compile --network zkSyncLocal",
         "build:ts": "rimraf dist && tsc -p tsconfig.prod.json",
         "build:ts:dev": "rimraf dist && tsc -p tsconfig.json",
         "test": "hardhat test",
+        "test:zk": "cross-env SAFE_CONTRACT_UNDER_TEST=SafeL2 hardhat test --network zkSyncLocal",
         "test:parallel": "hardhat test --parallel",
         "coverage": "hardhat coverage",
         "benchmark": "npm run test benchmark/*.ts",
@@ -32,7 +34,7 @@
         "fmt:ts": "prettier 'src/**/*.ts' 'test/**/*.ts' -w",
         "prepack": "npm run build",
         "prepare": "husky install",
-        "prepublish": "rimraf build && npm run build && npm run build:ts"
+        "prepublish": "rimraf build && npm run build && npm run build:zk && npm run build:ts"
     },
     "repository": {
         "type": "git",
@@ -48,6 +50,8 @@
         "url": "https://github.com/safe-global/safe-contracts/issues"
     },
     "devDependencies": {
+        "@matterlabs/hardhat-zksync-solc": "^0.4.1",
+        "@matterlabs/hardhat-zksync-verify": "^0.2.0",
         "@nomicfoundation/hardhat-toolbox": "^3.0.0",
         "@openzeppelin/contracts": "^3.4.0",
         "@safe-global/mock-contract": "^4.0.0",
@@ -58,6 +62,7 @@
         "@types/yargs": "^17.0.24",
         "@typescript-eslint/eslint-plugin": "^6.4.1",
         "@typescript-eslint/parser": "^6.4.1",
+        "cross-env": "^7.0.3",
         "debug": "^4.2.0",
         "dotenv": "^16.3.1",
         "eslint": "^8.47.0",

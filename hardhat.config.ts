@@ -1,5 +1,8 @@
 import "@nomicfoundation/hardhat-toolbox";
 import type { HardhatUserConfig, HttpNetworkUserConfig } from "hardhat/types";
+import "@matterlabs/hardhat-zksync-deploy";
+import "@matterlabs/hardhat-zksync-solc";
+import "@matterlabs/hardhat-zksync-verify";
 import "hardhat-deploy";
 import dotenv from "dotenv";
 import yargs from "yargs";
@@ -36,8 +39,10 @@ if (["mainnet", "rinkeby", "kovan", "goerli", "ropsten", "mumbai", "polygon"].in
 import "./src/tasks/local_verify";
 import "./src/tasks/deploy_contracts";
 import "./src/tasks/show_codesize";
+import "./src/tasks/zk";
 import { BigNumber } from "@ethersproject/bignumber";
 import { DeterministicDeploymentInfo } from "hardhat-deploy/dist/types";
+import { LOCAL_NODE_RICH_WALLETS } from "./src/zk-utils/constants";
 
 const primarySolidityVersion = SOLIDITY_VERSION || "0.7.6";
 const soliditySettings = SOLIDITY_SETTINGS ? JSON.parse(SOLIDITY_SETTINGS) : undefined;
@@ -71,6 +76,13 @@ const userConfig: HardhatUserConfig = {
     },
     solidity: {
         compilers: [{ version: primarySolidityVersion, settings: soliditySettings }, { version: "0.6.12" }, { version: "0.5.17" }],
+    },
+    zksolc: {
+        version: "1.3.13",
+        compilerSource: "binary",
+        settings: {
+            isSystem: true,
+        },
     },
     networks: {
         hardhat: {
@@ -113,6 +125,28 @@ const userConfig: HardhatUserConfig = {
         avalanche: {
             ...sharedNetworkConfig,
             url: `https://api.avax.network/ext/bc/C/rpc`,
+        },
+        zkSyncMainnet: {
+            ...sharedNetworkConfig,
+            url: "https://mainnet.era.zksync.io",
+            ethNetwork: "mainnet",
+            zksync: true,
+            verifyURL: "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
+        },
+        zkSyncTestnet: {
+            ...sharedNetworkConfig,
+            url: "https://testnet.era.zksync.dev",
+            ethNetwork: "goerli",
+            zksync: true,
+            verifyURL: "https://zksync2-testnet-explorer.zksync.dev/contract_verification",
+        },
+        zkSyncLocal: {
+            chainId: 270,
+            accounts: LOCAL_NODE_RICH_WALLETS.map((account) => account.privateKey),
+            url: "http://localhost:3050",
+            ethNetwork: "http://localhost:8545",
+            zksync: true,
+            saveDeployments: true,
         },
     },
     deterministicDeployment,
