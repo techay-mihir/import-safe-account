@@ -3,8 +3,21 @@ pragma solidity >=0.7.0 <0.9.0;
 
 import {TokenCallbackHandler} from "./TokenCallbackHandler.sol";
 import {ISignatureValidator} from "../interfaces/ISignatureValidator.sol";
-import {Safe} from "../Safe.sol";
 import {HandlerContext} from "./HandlerContext.sol";
+
+interface ISafe {
+    function domainSeparator() external view returns (bytes32);
+
+    function signedMessages(bytes32) external view returns (uint256);
+
+    function checkSignatures(bytes32, bytes memory) external view;
+
+    function checkNSignatures(address, bytes32, bytes memory, uint256) external view;
+
+    function getModulesPaginated(address, uint256) external view returns (address[] memory, address);
+
+    function getThreshold() external view returns (uint256);
+}
 
 /**
  * @title Compatibility Fallback Handler - Provides compatibility between pre 1.3.0 and 1.3.0+ Safe contracts.
@@ -24,7 +37,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
      * @return Message hash.
      */
     function getMessageHash(bytes memory message) public view returns (bytes32) {
-        return getMessageHashForSafe(Safe(payable(msg.sender)), message);
+        return getMessageHashForSafe(ISafe(payable(msg.sender)), message);
     }
 
     /**
@@ -33,7 +46,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
      * @param message Message that should be encoded.
      * @return Encoded message.
      */
-    function encodeMessageDataForSafe(Safe safe, bytes memory message) public view returns (bytes memory) {
+    function encodeMessageDataForSafe(ISafe safe, bytes memory message) public view returns (bytes memory) {
         bytes32 safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(message)));
         return abi.encodePacked(bytes1(0x19), bytes1(0x01), safe.domainSeparator(), safeMessageHash);
     }
@@ -44,7 +57,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
      * @param message Message that should be hashed.
      * @return Message hash.
      */
-    function getMessageHashForSafe(Safe safe, bytes memory message) public view returns (bytes32) {
+    function getMessageHashForSafe(ISafe safe, bytes memory message) public view returns (bytes32) {
         return keccak256(encodeMessageDataForSafe(safe, message));
     }
 
@@ -56,7 +69,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
      */
     function isValidSignature(bytes32 _dataHash, bytes calldata _signature) public view override returns (bytes4) {
         // Caller should be a Safe
-        Safe safe = Safe(payable(msg.sender));
+        ISafe safe = ISafe(payable(msg.sender));
         bytes memory messageData = encodeMessageDataForSafe(safe, abi.encode(_dataHash));
         bytes32 messageHash = keccak256(messageData);
         if (_signature.length == 0) {
@@ -73,7 +86,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
      */
     function getModules() external view returns (address[] memory) {
         // Caller should be a Safe
-        Safe safe = Safe(payable(msg.sender));
+        ISafe safe = ISafe(payable(msg.sender));
         (address[] memory array, ) = safe.getModulesPaginated(SENTINEL_MODULES, 10);
         return array;
     }
@@ -174,7 +187,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
         bytes memory signatures,
         uint256 requiredSignatures
     ) public view {
-        Safe(payable(_manager())).checkNSignatures(_msgSender(), dataHash, signatures, requiredSignatures);
+        ISafe(payable(_manager())).checkNSignatures(_msgSender(), dataHash, signatures, requiredSignatures);
     }
 
     /**
@@ -188,7 +201,7 @@ contract CompatibilityFallbackHandler is TokenCallbackHandler, ISignatureValidat
      *                   Can be packed ECDSA signature ({bytes32 r}{bytes32 s}{uint8 v}), contract signature (EIP-1271) or approved hash.
      */
     function checkSignatures(bytes32 dataHash, bytes memory /* IGNORED */, bytes memory signatures) public view {
-        Safe safe = Safe(payable(_manager()));
+        ISafe safe = ISafe(payable(_manager()));
 
         uint256 threshold = safe.getThreshold();
         safe.checkNSignatures(_msgSender(), dataHash, signatures, threshold);
