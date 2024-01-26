@@ -1,0 +1,40 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "TestNativeTokenReceiver",
+  "sourceName": "contracts/test/TestNativeTokenReceiver.sol",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "forwardedGas",
+          "type": "uint256"
+        }
+      ],
+      "name": "BreadReceived",
+      "type": "event"
+    },
+    {
+      "stateMutability": "payable",
+      "type": "fallback"
+    }
+  ],
+  "bytecode": "0x6080604052348015600f57600080fd5b50609280601d6000396000f3fe60806040523373ffffffffffffffffffffffffffffffffffffffff167f16549311ba52796916987df5401f791fb06b998524a5a8684010010415850bb3345a604051808381526020018281526020019250505060405180910390a200fea264697066735822122035663a4184b682e3d2c1649228db3273b6a2439d885e4203ca9ef996501e7b4c64736f6c63430007060033",
+  "deployedBytecode": "0x60806040523373ffffffffffffffffffffffffffffffffffffffff167f16549311ba52796916987df5401f791fb06b998524a5a8684010010415850bb3345a604051808381526020018281526020019250505060405180910390a200fea264697066735822122035663a4184b682e3d2c1649228db3273b6a2439d885e4203ca9ef996501e7b4c64736f6c63430007060033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
