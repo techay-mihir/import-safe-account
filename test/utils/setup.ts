@@ -1,26 +1,28 @@
 import hre, { deployments } from "hardhat";
-import { Contract, Signer } from "ethers";
+import { Contract, Signer, ethers } from "ethers";
 import { AddressZero } from "@ethersproject/constants";
 import solc from "solc";
+import * as zk from "zksync-ethers";
 import { logGas } from "../../src/utils/execution";
 import { safeContractUnderTest } from "./config";
+import { zkCompile } from "./zkSync";
 import { getRandomIntAsString } from "./numbers";
-import { Safe, SafeL2 } from "../../typechain-types";
+import { DelegateCaller, Migration__factory, MockContract, MockContract__factory, Safe, SafeL2 } from "../../typechain-types";
 
 export const defaultTokenCallbackHandlerDeployment = async () => {
-    return await deployments.get("TokenCallbackHandler");
+    return deployments.get("TokenCallbackHandler");
 };
 
 export const defaultTokenCallbackHandlerContract = async () => {
-    return await hre.ethers.getContractFactory("TokenCallbackHandler");
+    return getContractFactoryByName("TokenCallbackHandler");
 };
 
 export const compatFallbackHandlerDeployment = async () => {
-    return await deployments.get("CompatibilityFallbackHandler");
+    return deployments.get("CompatibilityFallbackHandler");
 };
 
 export const compatFallbackHandlerContract = async () => {
-    return await hre.ethers.getContractFactory("CompatibilityFallbackHandler");
+    return getContractFactoryByName("CompatibilityFallbackHandler");
 };
 
 export const getSafeSingleton = async () => {
@@ -30,13 +32,13 @@ export const getSafeSingleton = async () => {
 };
 
 export const getSafeSingletonContract = async () => {
-    const safeSingleton = await hre.ethers.getContractFactory("Safe");
+    const safeSingleton = await getContractFactoryByName("Safe");
 
     return safeSingleton;
 };
 
 export const getSafeL2SingletonContract = async () => {
-    const safeSingleton = await hre.ethers.getContractFactory("SafeL2");
+    const safeSingleton = await getContractFactoryByName("SafeL2");
 
     return safeSingleton;
 };
@@ -55,7 +57,7 @@ export const getSafeSingletonAt = async (address: string) => {
 };
 
 export const getFactoryContract = async () => {
-    const factory = await hre.ethers.getContractFactory("SafeProxyFactory");
+    const factory = await getContractFactoryByName("SafeProxyFactory");
 
     return factory;
 };
@@ -96,7 +98,7 @@ export const getCreateCall = async () => {
 };
 
 export const migrationContract = async () => {
-    return await hre.ethers.getContractFactory("Migration");
+    return (await getContractFactoryByName("Migration")) as Migration__factory;
 };
 
 export const migrationContractTo150 = async () => {
@@ -107,9 +109,19 @@ export const migrationContractFrom130To141 = async () => {
     return await hre.ethers.getContractFactory("Safe130To141Migration");
 };
 
-export const getMock = async () => {
-    const Mock = await hre.ethers.getContractFactory("MockContract");
-    return await Mock.deploy();
+export const getMock = async (): Promise<MockContract> => {
+    const contractFactory = (await getContractFactoryByName("MockContract")) as unknown as MockContract__factory;
+    const contract = await contractFactory.deploy();
+
+    return contract;
+};
+
+export const getContractFactoryByName = async (contractName: string): Promise<ethers.ContractFactory | zk.ContractFactory> => {
+    if (hre.network.zksync) {
+        return hre.zksyncEthers.getContractFactory(contractName);
+    } else {
+        return hre.ethers.getContractFactory(contractName);
+    }
 };
 
 export const getSafeTemplate = async (saltNumber: string = getRandomIntAsString()) => {
@@ -182,15 +194,15 @@ export const getCompatFallbackHandler = async (address?: string) => {
     return fallbackHandler;
 };
 
-export const getSafeProxyRuntimeCode = async () => {
+export const getSafeProxyRuntimeCode = async (): Promise<string> => {
     const proxyArtifact = await hre.artifacts.readArtifact("SafeProxy");
 
     return proxyArtifact.deployedBytecode;
 };
 
 export const getDelegateCaller = async () => {
-    const DelegateCaller = await hre.ethers.getContractFactory("DelegateCaller");
-    return await DelegateCaller.deploy();
+    const DelegateCaller = await getContractFactoryByName("DelegateCaller");
+    return (await DelegateCaller.deploy()) as DelegateCaller;
 };
 
 export const compile = async (source: string) => {
@@ -225,14 +237,39 @@ export const compile = async (source: string) => {
     };
 };
 
-export const deployContract = async (deployer: Signer, source: string): Promise<Contract> => {
-    const output = await compile(source);
-    const transaction = await deployer.sendTransaction({ data: output.data, gasLimit: 6000000 });
-    const receipt = await transaction.wait();
+export const deployContract = async (deployer: Signer, source: string): Promise<ethers.Contract> => {
+    if (!hre.network.zksync) {
+        const output = await compile(source);
+        const transaction = await deployer.sendTransaction({ data: output.data, gasLimit: 6000000 });
+        const receipt = await transaction.wait();
 
-    if (!receipt?.contractAddress) {
-        throw Error("Could not deploy contract");
+        if (!receipt?.contractAddress) {
+            throw Error("Could not deploy contract");
+        }
+
+        return new Contract(receipt.contractAddress, output.interface, deployer);
+    } else {
+        const output = await zkCompile(hre, source);
+        const signers = await getWallets();
+        const factory = new zk.ContractFactory(output.abi, output.data, signers[0] as zk.Wallet, "create");
+        // Encode and send the deploy transaction providing factory dependencies.
+        const contract = await factory.deploy();
+
+        return contract as ethers.Contract;
     }
+};
 
-    return new Contract(receipt.contractAddress, output.interface, deployer);
+export const getWallets = async () => {
+    console.log({ network: hre.network });
+    if (hre.network.name === "hardhat") return hre.ethers.getSigners();
+    if (hre.network.zksync) return hre.zksyncEthers.getWallets();
+
+    throw new Error("You can get wallets only on Hardhat or ZkSyncLocal networks!");
+};
+
+export const getSignMessageLib = async () => {
+    const SignMessageLibDeployment = await deployments.get("SignMessageLib");
+    const SignMessageLib = await hre.ethers.getContractAt("SignMessageLib", SignMessageLibDeployment.address);
+
+    return SignMessageLib;
 };

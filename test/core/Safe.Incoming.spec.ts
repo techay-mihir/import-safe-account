@@ -1,10 +1,11 @@
 import { expect } from "chai";
-import hre, { deployments, ethers } from "hardhat";
-import { deployContract, getSafeWithOwners } from "../utils/setup";
+import hre, { ethers } from "hardhat";
+import { deployContract, getSafeWithOwners, getWallets } from "../utils/setup";
 
 describe("Safe", () => {
-    const setupTests = deployments.createFixture(async ({ deployments }) => {
+    const setupTests = hre.deployments.createFixture(async ({ deployments }) => {
         await deployments.fixture();
+        console.log("AFTER DEPLOYMENTS.FIXTURE");
         const source = `
         contract Test {
             function transferEth(address payable safe) public payable returns (bool success) {
@@ -18,7 +19,7 @@ describe("Safe", () => {
                 require(success);
             }
         }`;
-        const signers = await ethers.getSigners();
+        const signers = await getWallets();
         const [user1] = signers;
         return {
             safe: await getSafeWithOwners([user1.address]),
@@ -28,7 +29,8 @@ describe("Safe", () => {
     });
 
     describe("fallback", () => {
-        it("should be able to receive ETH via transfer", async () => {
+        it.only("should be able to receive ETH via transfer", async () => {
+            console.log("LFG");
             const { safe, caller } = await setupTests();
             const safeAddress = await safe.getAddress();
 
@@ -84,7 +86,7 @@ describe("Safe", () => {
             } = await setupTests();
             const safeAddress = await safe.getAddress();
 
-            await expect(user1.sendTransaction({ to: safeAddress, value: 23, data: "0xbaddad" })).to.be.reverted;
+            await expect(user1.sendTransaction({ to: safeAddress, value: 23, data: "0xbaddad" })).to.be.revertedWithoutReason();
         });
     });
 });

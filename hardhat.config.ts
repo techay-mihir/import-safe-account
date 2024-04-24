@@ -1,5 +1,10 @@
 import "@nomicfoundation/hardhat-toolbox";
 import type { HardhatUserConfig, HttpNetworkUserConfig } from "hardhat/types";
+import "@matterlabs/hardhat-zksync-deploy";
+import "@matterlabs/hardhat-zksync-solc";
+import "@matterlabs/hardhat-zksync-verify";
+import "@matterlabs/hardhat-zksync-ethers";
+import "@matterlabs/hardhat-zksync-node";
 import "hardhat-deploy";
 import dotenv from "dotenv";
 import yargs from "yargs";
@@ -16,7 +21,16 @@ const argv = yargs
 
 // Load environment variables.
 dotenv.config();
-const { NODE_URL, INFURA_KEY, MNEMONIC, ETHERSCAN_API_KEY, PK, SOLIDITY_VERSION, SOLIDITY_SETTINGS } = process.env;
+const {
+    NODE_URL,
+    INFURA_KEY,
+    MNEMONIC,
+    ETHERSCAN_API_KEY,
+    PK,
+    SOLIDITY_VERSION,
+    SOLIDITY_SETTINGS,
+    HARDHAT_RUN_ZKSYNC_NODE = "",
+} = process.env;
 
 const DEFAULT_MNEMONIC = "candy maple cake sugar pudding cream honey rich smooth crumble sweet treat";
 
@@ -36,6 +50,7 @@ if (["mainnet", "rinkeby", "kovan", "goerli", "ropsten", "mumbai", "polygon"].in
 import "./src/tasks/local_verify";
 import "./src/tasks/deploy_contracts";
 import "./src/tasks/show_codesize";
+import "./src/tasks/zk";
 import { BigNumber } from "@ethersproject/bignumber";
 import { DeterministicDeploymentInfo } from "hardhat-deploy/dist/types";
 
@@ -73,11 +88,15 @@ const userConfig: HardhatUserConfig = {
     solidity: {
         compilers: [{ version: primarySolidityVersion, settings: soliditySettings }, { version: defaultSolidityVersion }],
     },
+    zksolc: {
+        version: "1.4.0",
+    },
     networks: {
         hardhat: {
             allowUnlimitedContractSize: true,
             blockGasLimit: 100000000,
             gas: 100000000,
+            zksync: Boolean(HARDHAT_RUN_ZKSYNC_NODE),
         },
         mainnet: {
             ...sharedNetworkConfig,
@@ -114,6 +133,27 @@ const userConfig: HardhatUserConfig = {
         avalanche: {
             ...sharedNetworkConfig,
             url: `https://api.avax.network/ext/bc/C/rpc`,
+        },
+        zkSyncMainnet: {
+            ...sharedNetworkConfig,
+            url: "https://mainnet.era.zksync.io",
+            ethNetwork: "mainnet",
+            zksync: true,
+            verifyURL: "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
+        },
+        zkSyncTestnet: {
+            ...sharedNetworkConfig,
+            url: "https://testnet.era.zksync.dev",
+            ethNetwork: "goerli",
+            zksync: true,
+            verifyURL: "https://zksync2-testnet-explorer.zksync.dev/contract_verification",
+        },
+        zkSyncLocal: {
+            chainId: 270,
+            url: "http://localhost:3050",
+            ethNetwork: "http://localhost:8545",
+            zksync: true,
+            saveDeployments: true,
         },
     },
     deterministicDeployment,

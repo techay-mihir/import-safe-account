@@ -1,12 +1,12 @@
 import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
-import { deployContract, getSimulateTxAccessor, getSafeWithOwners, getCompatFallbackHandler } from "../utils/setup";
+import { deployContract, getSimulateTxAccessor, getSafeWithOwners, getCompatFallbackHandler, getWallets } from "../utils/setup";
 import { buildContractCall } from "../../src/utils/execution";
 
 describe("SimulateTxAccessor", () => {
     const setupTests = deployments.createFixture(async ({ deployments }) => {
         await deployments.fixture();
-        const signers = await ethers.getSigners();
+        const signers = await getWallets();
         const [user1] = signers;
         const accessor = await getSimulateTxAccessor();
         const source = `
@@ -65,7 +65,7 @@ describe("SimulateTxAccessor", () => {
             const [user1, user2] = signers;
             const accessorAddress = await accessor.getAddress();
             const safeAddress = await safe.getAddress();
-            await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") });
+            await (await user1.sendTransaction({ to: safeAddress, value: ethers.parseEther("1") })).wait();
             const userBalance = await hre.ethers.provider.getBalance(user2.address);
             const tx = await buildContractCall(interactor, "sendAndReturnBalance", [user2.address, ethers.parseEther("1")], 0, true);
             const simulationData = accessor.interface.encodeFunctionData("simulate", [tx.to, tx.value, tx.data, tx.operation]);
@@ -80,7 +80,7 @@ describe("SimulateTxAccessor", () => {
 
         it("simulate revert", async () => {
             const { accessor, interactor, simulator, signers } = await setupTests();
-            const [, user2] = signers;
+            const [, user2] = await signers;
             const accessorAddress = await accessor.getAddress();
             const tx = await buildContractCall(interactor, "sendAndReturnBalance", [user2.address, ethers.parseEther("1")], 0, true);
             const simulationData = accessor.interface.encodeFunctionData("simulate", [tx.to, tx.value, tx.data, tx.operation]);
